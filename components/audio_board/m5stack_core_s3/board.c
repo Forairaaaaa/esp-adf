@@ -24,6 +24,7 @@
 
 #include "esp_log.h"
 #include "esp_lcd_panel_ops.h"
+#include "driver/i2c_master.h"
 
 #include "audio_mem.h"
 #include "periph_sdcard.h"
@@ -35,6 +36,129 @@
 static const char *TAG = "AUDIO_BOARD";
 
 static audio_board_handle_t board_handle = 0;
+static i2c_master_bus_handle_t board_i2c_bus_handle;
+static i2c_master_dev_handle_t baord_axp2101_handle;
+static i2c_master_dev_handle_t baord_aw9523_handle;
+
+/* --------------------------------- I2C Bus -------------------------------- */
+static void audio_board_i2c_init()
+{
+    i2c_master_bus_config_t i2c_bus_cfg = {
+        .i2c_port = (i2c_port_t)1,
+        .sda_io_num = GPIO_NUM_12,
+        .scl_io_num = GPIO_NUM_11,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .intr_priority = 0,
+        .trans_queue_depth = 0,
+        .flags = {
+            .enable_internal_pullup = 1,
+        },
+    };
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &board_i2c_bus_handle));
+}
+
+static void i2c_detect(i2c_master_bus_handle_t bus_handle)
+{
+    uint8_t address;
+    printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\r\n");
+    for (int i = 0; i < 128; i += 16) {
+        printf("%02x: ", i);
+        for (int j = 0; j < 16; j++) {
+            fflush(stdout);
+            address = i + j;
+            esp_err_t ret = i2c_master_probe(bus_handle, address, pdMS_TO_TICKS(200));
+            if (ret == ESP_OK) {
+                printf("%02x ", address);
+            } else if (ret == ESP_ERR_TIMEOUT) {
+                printf("UU ");
+            } else {
+                printf("-- ");
+            }
+        }
+        printf("\r\n");
+    }
+}
+
+static esp_err_t i2c_dev_write_reg_8(i2c_master_dev_handle_t i2c_dev, uint8_t reg, uint8_t data)
+{
+    uint8_t w_buf[2];
+    w_buf[0] = reg;
+    w_buf[1] = data;
+    esp_err_t ret = i2c_master_transmit(i2c_dev, w_buf, 2, portMAX_DELAY);
+    ESP_ERROR_CHECK(ret);
+    return ret;
+}
+
+static uint8_t i2c_dev_read_reg_8(i2c_master_dev_handle_t i2c_dev, uint8_t reg)
+{
+    uint8_t w_buf[1];
+    uint8_t r_buf[1];
+    w_buf[0] = reg;
+    ESP_ERROR_CHECK(i2c_master_transmit_receive(i2c_dev, w_buf, 1, r_buf, 1, portMAX_DELAY));
+    return r_buf[0];
+}
+
+/* --------------------------------- AXP2101 -------------------------------- */
+static void audio_board_axp2101_init()
+{
+    ESP_LOGI(TAG, "Init AXP2101");
+
+    i2c_device_config_t axp2101_config = {};
+    axp2101_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    axp2101_config.device_address = 0x34;
+    axp2101_config.scl_speed_hz = 400000;
+    i2c_master_bus_add_device(board_i2c_bus_handle, &axp2101_config, &baord_axp2101_handle);
+
+    uint8_t data = i2c_dev_read_reg_8(baord_axp2101_handle, 0x90);
+    data |= 0b10110100;
+    i2c_dev_write_reg_8(baord_axp2101_handle, 0x90, data);
+    i2c_dev_write_reg_8(baord_axp2101_handle, 0x99, (0b11110 - 5));
+    i2c_dev_write_reg_8(baord_axp2101_handle, 0x97, (0b11110 - 2));
+    i2c_dev_write_reg_8(baord_axp2101_handle, 0x69, 0b00110101);
+    i2c_dev_write_reg_8(baord_axp2101_handle, 0x30, 0b111111);
+    i2c_dev_write_reg_8(baord_axp2101_handle, 0x90, 0xBF);
+    i2c_dev_write_reg_8(baord_axp2101_handle, 0x94, 33 - 5);
+    i2c_dev_write_reg_8(baord_axp2101_handle, 0x95, 33 - 5);
+}
+
+/* --------------------------------- AW9523 --------------------------------- */
+static void audio_board_aw9523_init()
+{
+    ESP_LOGI(TAG, "Init AW9523");
+
+    i2c_device_config_t aw9523_config = {};
+    aw9523_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    aw9523_config.device_address = 0x58;
+    aw9523_config.scl_speed_hz = 400000;
+
+    i2c_master_bus_add_device(board_i2c_bus_handle, &aw9523_config, &baord_aw9523_handle);
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x02, 0b00000111);  // P0
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x03, 0b10001111);  // P1
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x04, 0b00011000);  // CONFIG_P0
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x05, 0b00001100);  // CONFIG_P1
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x11, 0b00010000);  // GCR P0 port is Push-Pull mode.
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x12, 0b11111111);  // LEDMODE_P0
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x13, 0b11111111);  // LEDMODE_P1
+}
+
+static void board_reset_aw88298()
+{
+    ESP_LOGI(TAG, "Reset AW88298");
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x02, 0b00000011);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x02, 0b00000111);
+    vTaskDelay(pdMS_TO_TICKS(50));
+}
+
+static void board_reset_ili9342()
+{
+    ESP_LOGI(TAG, "Reset IlI9342");
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x03, 0b10000001);
+    vTaskDelay(pdMS_TO_TICKS(20));
+    i2c_dev_write_reg_8(baord_aw9523_handle, 0x03, 0b10000011);
+    vTaskDelay(pdMS_TO_TICKS(10));
+}
 
 audio_board_handle_t audio_board_init(void)
 {
@@ -42,6 +166,10 @@ audio_board_handle_t audio_board_init(void)
         ESP_LOGW(TAG, "The board has already been initialized!");
         return board_handle;
     }
+    audio_board_i2c_init();
+    audio_board_axp2101_init();
+    audio_board_aw9523_init();
+    i2c_detect(board_i2c_bus_handle);
     board_handle = (audio_board_handle_t) audio_calloc(1, sizeof(struct audio_board_handle));
     AUDIO_MEM_CHECK(TAG, board_handle, return NULL);
     board_handle->audio_hal = audio_board_codec_init();
@@ -66,6 +194,9 @@ audio_hal_handle_t audio_board_codec_init(void)
     AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
     return codec_hal;
 }
+
+/* ---------------------------------- TODO ---------------------------------- */
+
 
 static esp_err_t _get_lcd_io_bus (void *bus, esp_lcd_panel_io_spi_config_t *io_config,
                                   esp_lcd_panel_io_handle_t *out_panel_io)

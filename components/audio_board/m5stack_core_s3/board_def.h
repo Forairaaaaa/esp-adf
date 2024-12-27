@@ -29,20 +29,20 @@
  * @brief LCD SCREEN Function Definition
  */
 #define FUNC_LCD_SCREEN_EN          (1)
-#define LCD_CTRL_GPIO               GPIO_NUM_47
-#define LCD_RST_GPIO                GPIO_NUM_48
-#define LCD_DC_GPIO                 GPIO_NUM_4
-#define LCD_CS_GPIO                 GPIO_NUM_5
-#define LCD_CLK_GPIO                GPIO_NUM_7
-#define LCD_MOSI_GPIO               GPIO_NUM_6
+#define LCD_CTRL_GPIO               GPIO_NUM_NC
+#define LCD_RST_GPIO                GPIO_NUM_NC
+#define LCD_DC_GPIO                 GPIO_NUM_35
+#define LCD_CS_GPIO                 GPIO_NUM_3
+#define LCD_CLK_GPIO                GPIO_NUM_36
+#define LCD_MOSI_GPIO               GPIO_NUM_37
 // The LCD pixel number in horizontal and vertical
 #define LCD_H_RES                   (320)
 #define LCD_V_RES                   (240)
 #define LCD_SWAP_XY                 (false)
-#define LCD_MIRROR_X                (true)
-#define LCD_MIRROR_Y                (true)
+#define LCD_MIRROR_X                (false)
+#define LCD_MIRROR_Y                (false)
 #define LCD_COLOR_INV               (false)
-#define LCD_COLOR_SPACE             ESP_LCD_COLOR_SPACE_BGR
+#define LCD_COLOR_SPACE             ESP_LCD_COLOR_SPACE_RGB
 
 /**
  * @brief SDCARD Function Definition
@@ -69,7 +69,7 @@
  */
 #define FUNC_LCD_TOUCH_EN          (1)
 #define TOUCH_PANEL_SWAP_XY        (0)
-#define TOUCH_PANEL_INVERSE_X      (1)
+#define TOUCH_PANEL_INVERSE_X      (0)
 #define TOUCH_PANEL_INVERSE_Y      (0)
 
 /**
@@ -81,7 +81,7 @@
 #define CODEC_ADC_SAMPLE_RATE     (48000)
 #define RECORD_HARDWARE_AEC       (true)
 #define BOARD_PA_GAIN             (0)  /* Power amplifier gain defined by board (dB) */
-#define PA_ENABLE_GPIO            GPIO_NUM_46
+#define PA_ENABLE_GPIO            GPIO_NUM_NC
 #define HEADPHONE_DETECT          (-1)
 #define ES7210_MIC_SELECT         (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2 | ES7210_INPUT_MIC3)
 
@@ -102,7 +102,7 @@ extern audio_hal_func_t AUDIO_CODEC_ES7210_DEFAULT_HANDLE;
 /**
  * @brief Button Function Definition
  */
-#define FUNC_BUTTON_EN              (1)
+#define FUNC_BUTTON_EN              (0)
 #define INPUT_KEY_NUM               (2)
 #define BUTTON_VOLUP_ID             (-1)
 #define BUTTON_VOLDOWN_ID           (-1)
