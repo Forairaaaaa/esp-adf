@@ -39,6 +39,7 @@ static audio_board_handle_t board_handle = 0;
 static i2c_master_bus_handle_t board_i2c_bus_handle;
 static i2c_master_dev_handle_t baord_axp2101_handle;
 static i2c_master_dev_handle_t baord_aw9523_handle;
+static i2c_master_dev_handle_t baord_aw88298_handle;
 
 /* --------------------------------- I2C Bus -------------------------------- */
 static void audio_board_i2c_init()
@@ -90,6 +91,17 @@ static esp_err_t i2c_dev_write_reg_8(i2c_master_dev_handle_t i2c_dev, uint8_t re
     return ret;
 }
 
+static esp_err_t i2c_dev_write_reg_16(i2c_master_dev_handle_t i2c_dev, uint8_t reg, uint16_t data)
+{
+    uint8_t w_buf[3];
+    w_buf[0] = reg;
+    w_buf[1] = (uint8_t)((data & 0xFFFF) >> 8);
+    w_buf[2] = (uint8_t)(data & 0xFF);
+    esp_err_t ret = i2c_master_transmit(i2c_dev, w_buf, 3, portMAX_DELAY);
+    ESP_ERROR_CHECK(ret);
+    return ret;
+}
+
 static uint8_t i2c_dev_read_reg_8(i2c_master_dev_handle_t i2c_dev, uint8_t reg)
 {
     uint8_t w_buf[1];
@@ -131,8 +143,8 @@ static void audio_board_aw9523_init()
     aw9523_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
     aw9523_config.device_address = 0x58;
     aw9523_config.scl_speed_hz = 400000;
-
     i2c_master_bus_add_device(board_i2c_bus_handle, &aw9523_config, &baord_aw9523_handle);
+
     i2c_dev_write_reg_8(baord_aw9523_handle, 0x02, 0b00000111);  // P0
     i2c_dev_write_reg_8(baord_aw9523_handle, 0x03, 0b10001111);  // P1
     i2c_dev_write_reg_8(baord_aw9523_handle, 0x04, 0b00011000);  // CONFIG_P0
@@ -160,6 +172,26 @@ static void board_reset_ili9342()
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
+/* --------------------------------- AW88298 -------------------------------- */
+static void audio_board_aw88298_init()
+{
+    ESP_LOGI(TAG, "Init AW88298");
+
+    i2c_device_config_t aw88298_config = {};
+    aw88298_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    aw88298_config.device_address = 0x36;
+    aw88298_config.scl_speed_hz = 400000;
+    i2c_master_bus_add_device(board_i2c_bus_handle, &aw88298_config, &baord_aw88298_handle);
+
+    board_reset_aw88298();
+
+    i2c_dev_write_reg_16(baord_aw88298_handle, 0x05, 0x0018);  // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
+    i2c_dev_write_reg_16(baord_aw88298_handle, 0x06, 0x14C8);  // I2SBCK=0 (BCK mode 16*2)
+    i2c_dev_write_reg_16(baord_aw88298_handle, 0x61, 0x0673);  // default:0x6673: BOOST mode disabled
+    i2c_dev_write_reg_16(baord_aw88298_handle, 0x0C, 0x2064);  // volume setting
+    i2c_dev_write_reg_16(baord_aw88298_handle, 0x04, 0x4040);  // I2SEN=1 AMPPD=0 PWDN=0
+}
+
 audio_board_handle_t audio_board_init(void)
 {
     if (board_handle) {
@@ -169,6 +201,7 @@ audio_board_handle_t audio_board_init(void)
     audio_board_i2c_init();
     audio_board_axp2101_init();
     audio_board_aw9523_init();
+    audio_board_aw88298_init();
     i2c_detect(board_i2c_bus_handle);
     board_handle = (audio_board_handle_t) audio_calloc(1, sizeof(struct audio_board_handle));
     AUDIO_MEM_CHECK(TAG, board_handle, return NULL);
@@ -177,7 +210,6 @@ audio_board_handle_t audio_board_init(void)
     return board_handle;
 }
 
-/* --------------------------------- AW88298 -------------------------------- */
 audio_hal_handle_t audio_board_codec_init(void)
 {
     // audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
@@ -185,20 +217,24 @@ audio_hal_handle_t audio_board_codec_init(void)
     // AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
     // return codec_hal;
 
-    audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
-    audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_AW88298_DEFAULT_HANDLE);
-    AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
-    return codec_hal;
+    // audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
+    // audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_AW88298_DEFAULT_HANDLE);
+    // AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
+    // return codec_hal;
+
+    return NULL;
 }
 
 audio_hal_handle_t audio_board_adc_init(void)
 {
-    audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
-    audio_codec_cfg.codec_mode = AUDIO_HAL_CODEC_MODE_ENCODE;
-    audio_hal_handle_t adc_hal = NULL;
-    adc_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES7210_DEFAULT_HANDLE);
-    AUDIO_NULL_CHECK(TAG, adc_hal, return NULL);
-    return adc_hal;
+    // audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
+    // audio_codec_cfg.codec_mode = AUDIO_HAL_CODEC_MODE_ENCODE;
+    // audio_hal_handle_t adc_hal = NULL;
+    // adc_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES7210_DEFAULT_HANDLE);
+    // AUDIO_NULL_CHECK(TAG, adc_hal, return NULL);
+    // return adc_hal;
+
+    return NULL;
 }
 
 /* ---------------------------------- TODO ---------------------------------- */

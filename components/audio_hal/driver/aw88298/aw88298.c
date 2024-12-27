@@ -101,12 +101,12 @@ esp_err_t aw88298_codec_init(audio_hal_codec_config_t *codec_cfg)
     esp_err_t ret = ESP_OK;
     i2c_init(); // ESP32 in master mode
 
-    ret |= aw88298_write_reg(codec, AW88298_RESET_REG00, 0x55aa); // Reset chip
-    ret |= aw88298_write_reg(codec, AW88298_SYSCTRL_REG04, 0x4040); // I2SEN=1 AMPPD=0 PWDN=0
-    ret |= aw88298_write_reg(codec, AW88298_SYSCTRL2_REG05, 0x0008); // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
-    ret |= aw88298_write_reg(codec, AW88298_I2SCTRL_REG06, 0x3CC8); // I2SBCK=0 (BCK mode 16*2)
-    ret |= aw88298_write_reg(codec, AW88298_HAGCCFG4_REG0C, 0x3064); // volume setting
-    ret |= aw88298_write_reg(codec, AW88298_BSTCTRL2_REG61, 0x0673); // default:0x6673: BOOST mode disabled
+    ret |= aw88298_write_reg(AW88298_RESET_REG00, 0x55aa); // Reset chip
+    ret |= aw88298_write_reg(AW88298_SYSCTRL_REG04, 0x4040); // I2SEN=1 AMPPD=0 PWDN=0
+    ret |= aw88298_write_reg(AW88298_SYSCTRL2_REG05, 0x0008); // RMSE=0 HAGCE=0 HDCCE=0 HMUTE=0
+    ret |= aw88298_write_reg(AW88298_I2SCTRL_REG06, 0x3CC8); // I2SBCK=0 (BCK mode 16*2)
+    ret |= aw88298_write_reg(AW88298_HAGCCFG4_REG0C, 0x3064); // volume setting
+    ret |= aw88298_write_reg(AW88298_BSTCTRL2_REG61, 0x0673); // default:0x6673: BOOST mode disabled
 
     if (ret != 0) {
         return ESP_FAIL;
