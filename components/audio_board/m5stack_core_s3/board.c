@@ -25,6 +25,7 @@
 #include "esp_log.h"
 #include "esp_lcd_panel_ops.h"
 #include "driver/i2c_master.h"
+#include "driver/i2s_tdm.h"
 
 #include "audio_mem.h"
 #include "periph_sdcard.h"
@@ -179,6 +180,8 @@ audio_board_handle_t audio_board_init(void)
     return board_handle;
 }
 
+/* --------------------------------- AW88298 -------------------------------- */
+
 // static audio_hal_func_t AUDIO_CODEC_AW88298_DEFAULT_HANDLE = {
 //     .audio_codec_initialize = es8311_codec_init,
 //     .audio_codec_deinitialize = es8311_codec_deinit,
@@ -193,8 +196,26 @@ audio_board_handle_t audio_board_init(void)
 // };
 
 static audio_codec_if_t* aw88298_codec_if;
+static esp_codec_dev_handle_t codec_output_dev;
+static i2s_chan_handle_t tx_handle;
+static i2s_chan_handle_t rx_handle;
+
+static esp_err_t aw88298_codec_init(audio_hal_codec_config_t *codec_cfg)
+{
+    esp_codec_dev_sample_info_t fs = {
+        .bits_per_sample = 16,
+        .channel = 1,
+        .channel_mask = 0,
+        .sample_rate = (uint32_t)48000,
+        .mclk_multiple = 0,
+    };
+    ESP_ERROR_CHECK(esp_codec_dev_open(codec_output_dev, &fs));
+    ESP_ERROR_CHECK(esp_codec_dev_set_out_vol(codec_output_dev, 10));
+    return ESP_OK;
+}
+
 static audio_hal_func_t AUDIO_CODEC_AW88298_DEFAULT_HANDLE = {
-    .audio_codec_initialize = NULL,
+    .audio_codec_initialize = aw88298_codec_init,
     .audio_codec_deinitialize = NULL,
     .audio_codec_ctrl = NULL,
     .audio_codec_config_iface = NULL,
@@ -212,6 +233,15 @@ audio_hal_handle_t audio_board_codec_init(void)
     // audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES8311_DEFAULT_HANDLE);
     // AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
     // return codec_hal;
+
+    // Do initialize of related interface: data_if, ctrl_if and gpio_if
+    audio_codec_i2s_cfg_t i2s_cfg = {
+        .port = I2S_NUM_0,
+        .rx_handle = rx_handle,
+        .tx_handle = tx_handle,
+    };
+    audio_codec_data_if_t* data_if = audio_codec_new_i2s_data(&i2s_cfg);
+    assert(data_if != NULL);
 
     audio_codec_i2c_cfg_t i2c_cfg = {
         .port = I2C_NUM_0,
@@ -233,6 +263,14 @@ audio_hal_handle_t audio_board_codec_init(void)
     aw88298_cfg.hw_gain.pa_gain = 1;
     aw88298_codec_if = aw88298_codec_new(&aw88298_cfg);
     assert(aw88298_codec_if != NULL);
+
+    esp_codec_dev_cfg_t dev_cfg = {
+        .dev_type = ESP_CODEC_DEV_TYPE_OUT,
+        .codec_if = aw88298_codec_if,
+        .data_if = data_if,
+    };
+    codec_output_dev = esp_codec_dev_new(&dev_cfg);
+    assert(codec_output_dev != NULL);
 
     audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
     audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_AW88298_DEFAULT_HANDLE);
