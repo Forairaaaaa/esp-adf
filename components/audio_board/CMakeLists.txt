@@ -143,4 +143,13 @@ set(COMPONENT_SRCS
 )
 endif()
 
+if (CONFIG_ESP32_M5STACK_CORE_S3_BOARD)
+message(STATUS "Current board name is " CONFIG_ESP32_M5STACK_CORE_S3_BOARD)
+list(APPEND COMPONENT_ADD_INCLUDEDIRS ./m5stack_core_s3)
+set(COMPONENT_SRCS
+./m5stack_core_s3/board.c
+./m5stack_core_s3/board_pins_config.c
+)
+endif()
+
 register_component()
