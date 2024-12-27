@@ -31,6 +31,8 @@
 #include "periph_lcd.h"
 #include "periph_button.h"
 #include "tca9554.h"
+#include "esp_codec_dev.h"
+#include "esp_codec_dev_defaults.h"
 #include "board.h"
 
 static const char *TAG = "AUDIO_BOARD";
@@ -44,7 +46,7 @@ static i2c_master_dev_handle_t baord_aw9523_handle;
 static void audio_board_i2c_init()
 {
     i2c_master_bus_config_t i2c_bus_cfg = {
-        .i2c_port = (i2c_port_t)1,
+        .i2c_port = I2C_NUM_0,
         .sda_io_num = GPIO_NUM_12,
         .scl_io_num = GPIO_NUM_11,
         .clk_source = I2C_CLK_SRC_DEFAULT,
@@ -177,10 +179,63 @@ audio_board_handle_t audio_board_init(void)
     return board_handle;
 }
 
+// static audio_hal_func_t AUDIO_CODEC_AW88298_DEFAULT_HANDLE = {
+//     .audio_codec_initialize = es8311_codec_init,
+//     .audio_codec_deinitialize = es8311_codec_deinit,
+//     .audio_codec_ctrl = es8311_codec_ctrl_state,
+//     .audio_codec_config_iface = es8311_codec_config_i2s,
+//     .audio_codec_set_mute = es8311_set_voice_mute,
+//     .audio_codec_set_volume = es8311_codec_set_voice_volume,
+//     .audio_codec_get_volume = es8311_codec_get_voice_volume,
+//     .audio_codec_enable_pa = es8311_pa_power,
+//     .audio_hal_lock = NULL,
+//     .handle = NULL,
+// };
+
+static audio_codec_if_t* aw88298_codec_if;
+static audio_hal_func_t AUDIO_CODEC_AW88298_DEFAULT_HANDLE = {
+    .audio_codec_initialize = NULL,
+    .audio_codec_deinitialize = NULL,
+    .audio_codec_ctrl = NULL,
+    .audio_codec_config_iface = NULL,
+    .audio_codec_set_mute = NULL,
+    .audio_codec_set_volume = NULL,
+    .audio_codec_get_volume = NULL,
+    .audio_codec_enable_pa = NULL,
+    .audio_hal_lock = NULL,
+    .handle = NULL,
+};
+
 audio_hal_handle_t audio_board_codec_init(void)
 {
+    // audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
+    // audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES8311_DEFAULT_HANDLE);
+    // AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
+    // return codec_hal;
+
+    audio_codec_i2c_cfg_t i2c_cfg = {
+        .port = I2C_NUM_0,
+        .addr = AW88298_CODEC_DEFAULT_ADDR,
+        .bus_handle = board_i2c_bus_handle,
+    };
+    audio_codec_ctrl_if_t* out_ctrl_if = audio_codec_new_i2c_ctrl(&i2c_cfg);
+    assert(out_ctrl_if != NULL);
+
+    audio_codec_gpio_if_t* gpio_if = audio_codec_new_gpio();
+    assert(gpio_if != NULL);
+
+    aw88298_codec_cfg_t aw88298_cfg = {};
+    aw88298_cfg.ctrl_if = out_ctrl_if;
+    aw88298_cfg.gpio_if = gpio_if;
+    aw88298_cfg.reset_pin = GPIO_NUM_NC;
+    aw88298_cfg.hw_gain.pa_voltage = 5.0;
+    aw88298_cfg.hw_gain.codec_dac_voltage = 3.3;
+    aw88298_cfg.hw_gain.pa_gain = 1;
+    aw88298_codec_if = aw88298_codec_new(&aw88298_cfg);
+    assert(aw88298_codec_if != NULL);
+
     audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
-    audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES8311_DEFAULT_HANDLE);
+    audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_AW88298_DEFAULT_HANDLE);
     AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
     return codec_hal;
 }
