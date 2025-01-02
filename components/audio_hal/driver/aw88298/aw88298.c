@@ -117,20 +117,20 @@ static int aw88298_read_reg(uint8_t reg, int *value)
     return ret;
 }
 
-static int aw88298_set_bits_per_sample(uint8_t bits)
+static int aw88298_set_bits_per_sample(audio_hal_iface_bits_t bits)
 {
     int ret = 0;
     int dac_iface = 0;
     ret = aw88298_read_reg(AW88298_I2SCTRL_REG06, &dac_iface);
     dac_iface &= ~(0xF0);
     switch (bits) {
-        case 16:
+        case AUDIO_HAL_BIT_LENGTH_16BITS:
         default:
             break;
-        case 24:
+        case AUDIO_HAL_BIT_LENGTH_24BITS:
             dac_iface |= 0x90;
             break;
-        case 32:
+        case AUDIO_HAL_BIT_LENGTH_32BITS:
             dac_iface |= 0xE0;
             break;
     }
