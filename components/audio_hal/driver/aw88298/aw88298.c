@@ -28,8 +28,11 @@
 #include "esp_log.h"
 #include "aw88298.h"
 #include "audio_volume.h"
+#include "math.h"
+#include "esp_codec_dev.h"
 
-#define AW88298_ADDR         0x36
+// #define AW88298_ADDR         0x36
+#define AW88298_ADDR         (0x36 << 1)
 
 #define ES_ASSERT(a, format, b, ...) \
     if ((a) != 0) { \
@@ -52,15 +55,32 @@ static codec_dac_volume_config_t *dac_vol_handle;
     .offset_conv_volume = NULL,                             \
 }
 
+/* The volume register mapped to decibel table can get from codec data-sheet
+   Volume control register 0x0C description:
+       0xC0 - '-96dB' ... 0x00 - '+0dB'
+*/
+const esp_codec_dev_vol_range_t vol_range = {
+    .min_vol =
+    {
+        .vol = 0xC0,
+        .db_value = -96,
+    },
+    .max_vol =
+    {
+        .vol = 0,
+        .db_value = 0,
+    },
+};
+
 audio_hal_func_t AUDIO_CODEC_AW88298_DEFAULT_HANDLE = {
     .audio_codec_initialize = aw88298_codec_init,
     .audio_codec_deinitialize = aw88298_codec_deinit,
     .audio_codec_ctrl = aw88298_codec_ctrl_state,
-    .audio_codec_config_iface = NULL,
-    .audio_codec_set_mute = NULL,
-    .audio_codec_set_volume = NULL,
-    .audio_codec_get_volume = NULL,
-    .audio_codec_enable_pa = NULL,
+    .audio_codec_config_iface = aw88298_codec_config_i2s,
+    .audio_codec_set_mute = aw88298_set_voice_mute,
+    .audio_codec_set_volume = aw88298_codec_set_voice_volume,
+    .audio_codec_get_volume = aw88298_codec_get_voice_volume,
+    .audio_codec_enable_pa = aw88298_pa_power,
     .audio_hal_lock = NULL,
     .handle = NULL,
 };
@@ -189,6 +209,33 @@ static int aw88298_start()
     return (ret == 0) ? ESP_OK : ESP_FAIL;;
 }
 
+static int aw88298_set_mute(bool mute)
+{
+    int regv;
+    int ret = aw88298_read_reg( AW88298_SYSCTRL2_REG05, &regv);
+    if (ret < 0) {
+        return ESP_CODEC_DEV_READ_FAIL;
+    }
+    if (mute) {
+        regv = regv | (1 << 4);
+    } else {
+        regv = regv & (~(1 << 4));
+    }
+    return aw88298_write_reg(AW88298_SYSCTRL2_REG05, regv);
+}
+
+static int aw88298_set_vol(float volume)
+{
+    ESP_LOGD(TAG, "Set volume to: %.2f", volume);
+    float hw_gain = 20 * log10(3.3 / 5.0) + 1;
+    volume -= hw_gain;
+    int reg = esp_codec_dev_vol_calc_reg(&vol_range, volume);
+    reg = (reg << 8) | 0x64;
+    int ret = aw88298_write_reg(AW88298_HAGCCFG4_REG0C, reg);
+    ESP_LOGD(TAG, "Set volume reg:%x db:%.2f", reg, esp_codec_dev_vol_calc_db(&vol_range, reg >> 8));
+    return (ret == 0) ? ESP_OK : ESP_FAIL;
+}
+
 esp_err_t aw88298_codec_init(audio_hal_codec_config_t *codec_cfg)
 {
     esp_err_t ret = ESP_OK;
@@ -268,3 +315,45 @@ esp_err_t aw88298_codec_ctrl_state(audio_hal_codec_mode_t mode, audio_hal_ctrl_t
 
     return ret;
 }
+
+esp_err_t aw88298_codec_config_i2s(audio_hal_codec_mode_t mode, audio_hal_codec_i2s_iface_t *iface)
+{
+    int ret = ESP_OK;
+    ret |= aw88298_set_bits_per_sample(iface->bits);
+    // ret |= es8311_config_fmt(iface->fmt);
+    return ret;
+}
+
+esp_err_t aw88298_set_voice_mute(bool enable)
+{
+    ESP_LOGD(TAG, "aw88298SetVoiceMute volume:%d", enable);
+    aw88298_set_mute(enable);
+    return ESP_OK;
+}
+
+static int _volume_buffer = 0;
+esp_err_t aw88298_codec_set_voice_volume(int volume)
+{
+    ESP_LOGD(TAG, "Set volume to: %d", volume);
+    if (aw88298_set_vol(volume) != ESP_OK) {
+        return ESP_FAIL;
+    }
+    _volume_buffer = volume;
+    return ESP_OK;
+}
+
+esp_err_t aw88298_codec_get_voice_volume(int *volume)
+{
+    esp_err_t res = ESP_OK;
+    *volume = _volume_buffer;
+    ESP_LOGD(TAG, "Get volume:%.2d", *volume);
+    return res;
+}
+
+esp_err_t aw88298_pa_power(bool enable)
+{
+    esp_err_t ret = ESP_OK;
+    ESP_LOGW(TAG, "No PA Power confige");
+    return ret;
+}
+

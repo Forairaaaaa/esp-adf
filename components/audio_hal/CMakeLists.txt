@@ -20,7 +20,7 @@ endif()
 
 # Edit following two lines to set component requirements (see docs)
 set(COMPONENT_REQUIRES )
-set(COMPONENT_PRIV_REQUIRES audio_sal audio_board mbedtls esp_peripherals display_service esp_dispatcher)
+set(COMPONENT_PRIV_REQUIRES audio_sal audio_board mbedtls esp_peripherals display_service esp_dispatcher esp_codec_dev)
 
 set(COMPONENT_SRCS ./audio_hal.c
                     ./audio_volume.c

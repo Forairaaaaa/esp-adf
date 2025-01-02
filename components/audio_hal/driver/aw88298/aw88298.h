@@ -103,6 +103,13 @@ extern "C" {
 #endif
 
 esp_err_t aw88298_codec_init(audio_hal_codec_config_t *codec_cfg);
+esp_err_t aw88298_codec_deinit();
+esp_err_t aw88298_codec_ctrl_state(audio_hal_codec_mode_t mode, audio_hal_ctrl_t ctrl_state);
+esp_err_t aw88298_codec_config_i2s(audio_hal_codec_mode_t mode, audio_hal_codec_i2s_iface_t *iface);
+esp_err_t aw88298_set_voice_mute(bool enable);
+esp_err_t aw88298_codec_set_voice_volume(int volume);
+esp_err_t aw88298_codec_get_voice_volume(int *volume);
+esp_err_t aw88298_pa_power(bool enable);
 
 #ifdef __cplusplus
 }

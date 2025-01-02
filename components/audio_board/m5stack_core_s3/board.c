@@ -59,6 +59,11 @@ static void audio_board_i2c_init()
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &board_i2c_bus_handle));
 }
 
+static void audio_board_i2c_deinit()
+{
+    ESP_ERROR_CHECK(i2c_del_master_bus(board_i2c_bus_handle));
+}
+
 static void i2c_detect(i2c_master_bus_handle_t bus_handle)
 {
     uint8_t address;
@@ -203,9 +208,11 @@ audio_board_handle_t audio_board_init(void)
     audio_board_aw9523_init();
     // audio_board_aw88298_init();
     i2c_detect(board_i2c_bus_handle);
+    board_reset_aw88298();
+    audio_board_i2c_deinit();
+
     board_handle = (audio_board_handle_t) audio_calloc(1, sizeof(struct audio_board_handle));
     AUDIO_MEM_CHECK(TAG, board_handle, return NULL);
-    board_reset_aw88298();
     board_handle->audio_hal = audio_board_codec_init();
     board_handle->adc_hal = audio_board_adc_init();
     return board_handle;
