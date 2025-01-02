@@ -226,9 +226,11 @@ audio_hal_handle_t audio_board_codec_init(void)
     // return codec_hal;
 
     audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
-    audio_codec_cfg.dac_output = AUDIO_HAL_DAC_OUTPUT_LINE1;
-    audio_codec_cfg.i2s_iface.mode = AUDIO_HAL_MODE_MASTER;
-    audio_codec_cfg.i2s_iface.samples = AUDIO_HAL_16K_SAMPLES;
+    // audio_codec_cfg.codec_mode = AUDIO_HAL_CODEC_MODE_DECODE;
+    // audio_codec_cfg.dac_output = AUDIO_HAL_DAC_OUTPUT_ALL;
+    // audio_codec_cfg.i2s_iface.mode = AUDIO_HAL_MODE_SLAVE;
+    // audio_codec_cfg.i2s_iface.samples = AUDIO_HAL_16K_SAMPLES;
+    // audio_codec_cfg.i2s_iface.fmt = AUDIO_HAL_I2S_DSP;
     audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_AW88298_DEFAULT_HANDLE);
     AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
     return codec_hal;
@@ -239,9 +241,9 @@ audio_hal_handle_t audio_board_codec_init(void)
 audio_hal_handle_t audio_board_adc_init(void)
 {
     audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
-    audio_codec_cfg.codec_mode = AUDIO_HAL_CODEC_MODE_ENCODE;
-    audio_codec_cfg.i2s_iface.mode = AUDIO_HAL_MODE_MASTER;
-    audio_codec_cfg.i2s_iface.samples = AUDIO_HAL_16K_SAMPLES;
+    // audio_codec_cfg.codec_mode = AUDIO_HAL_CODEC_MODE_ENCODE;
+    // audio_codec_cfg.i2s_iface.mode = AUDIO_HAL_MODE_MASTER;
+    // audio_codec_cfg.i2s_iface.samples = AUDIO_HAL_16K_SAMPLES;
     audio_hal_handle_t adc_hal = NULL;
     adc_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES7210_DEFAULT_HANDLE);
     AUDIO_NULL_CHECK(TAG, adc_hal, return NULL);

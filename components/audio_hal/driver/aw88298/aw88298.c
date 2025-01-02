@@ -330,8 +330,8 @@ esp_err_t aw88298_codec_init(audio_hal_codec_config_t *codec_cfg)
         return ESP_FAIL;
     }
 
-    codec_dac_volume_config_t vol_cfg = AW88298_DAC_VOL_CFG_DEFAULT();
-    dac_vol_handle = audio_codec_volume_init(&vol_cfg);
+    // codec_dac_volume_config_t vol_cfg = AW88298_DAC_VOL_CFG_DEFAULT();
+    // dac_vol_handle = audio_codec_volume_init(&vol_cfg);
 
     return ESP_OK;
 }
