@@ -38,11 +38,24 @@
     }
 
 static i2c_bus_handle_t i2c_handle;
+static codec_dac_volume_config_t *dac_vol_handle;
+
+#define AW88298_DAC_VOL_CFG_DEFAULT() {                      \
+    .max_dac_volume = 32,                                   \
+    .min_dac_volume = -95.5,                                \
+    .board_pa_gain = BOARD_PA_GAIN,                         \
+    .volume_accuracy = 0.5,                                 \
+    .dac_vol_symbol = 1,                                    \
+    .zero_volume_reg = 0xBF,                                \
+    .reg_value = 0,                                         \
+    .user_volume = 0,                                       \
+    .offset_conv_volume = NULL,                             \
+}
 
 audio_hal_func_t AUDIO_CODEC_AW88298_DEFAULT_HANDLE = {
     .audio_codec_initialize = aw88298_codec_init,
-    .audio_codec_deinitialize = NULL,
-    .audio_codec_ctrl = NULL,
+    .audio_codec_deinitialize = aw88298_codec_deinit,
+    .audio_codec_ctrl = aw88298_codec_ctrl_state,
     .audio_codec_config_iface = NULL,
     .audio_codec_set_mute = NULL,
     .audio_codec_set_volume = NULL,
@@ -69,18 +82,6 @@ static int i2c_init()
     return res;
 }
 
-// static esp_err_t aw88298_write_reg(int reg, int value)
-// {
-//     return i2c_bus_write_bytes(i2c_handle, AW88298_ADDR, &reg_addr, sizeof(reg_addr), &data, sizeof(data));
-// }
-
-// static int aw88298_read_reg(int reg, int value)
-// {
-//     uint8_t data;
-//     i2c_bus_read_bytes(i2c_handle, AW88298_ADDR, &reg_addr, sizeof(reg_addr), &data, sizeof(data));
-//     return (int)data;
-// }
-
 static esp_err_t aw88298_write_reg(uint8_t reg, int value)
 {
     uint8_t write_data[2] = {(uint8_t) ((value & 0xFFFF) >> 8), (uint8_t) (value & 0xFF)};
@@ -94,6 +95,98 @@ static int aw88298_read_reg(uint8_t reg, int *value)
     i2c_bus_read_bytes(i2c_handle, AW88298_ADDR, &reg, 1, &read_data, sizeof(read_data));
     *value = ((int)read_data[0] << 8) | read_data[1];
     return ret;
+}
+
+static int aw88298_set_bits_per_sample(uint8_t bits)
+{
+    int ret = 0;
+    int dac_iface = 0;
+    ret = aw88298_read_reg(AW88298_I2SCTRL_REG06, &dac_iface);
+    dac_iface &= ~(0xF0);
+    switch (bits) {
+        case 16:
+        default:
+            break;
+        case 24:
+            dac_iface |= 0x90;
+            break;
+        case 32:
+            dac_iface |= 0xE0;
+            break;
+    }
+    ret |= aw88298_write_reg(AW88298_I2SCTRL_REG06, dac_iface);
+    ESP_LOGD(TAG, "Bits %d", bits);
+    return ret;
+}
+
+static int aw88298_config_sample(int sample_rate)
+{
+    int ret = 0;
+    int dac_iface = 0;
+    ret = aw88298_read_reg(AW88298_I2SCTRL_REG06, &dac_iface);
+    dac_iface &= ~(0x0F);
+    switch (sample_rate) {
+        case 8000:
+            break;
+        case 11025:
+            dac_iface |= 0x01;
+            break;
+        case 12000:
+            dac_iface |= 0x02;
+            break;
+        case 16000:
+            dac_iface |= 0x03;
+            break;
+        case 22050:
+            dac_iface |= 0x04;
+            break;
+        case 24000:
+            dac_iface |= 0x05;
+            break;
+        case 32000:
+            dac_iface |= 0x06;
+            break;
+        case 44100:
+            dac_iface |= 0x07;
+            break;
+        case 48000:
+            dac_iface |= 0x08;
+            break;
+        case 96000:
+            dac_iface |= 0x09;
+            break;
+        case 192000:
+            dac_iface |= 0x0A;
+            break;
+        default:
+            ESP_LOGE(TAG, "Sample rate(%d) can not support", sample_rate);
+            return ESP_FAIL;
+    }
+    ESP_LOGD(TAG, "Current sample rate: %d", sample_rate);
+    ret |= aw88298_write_reg(AW88298_I2SCTRL_REG06, dac_iface);
+    return ret;
+}
+
+static int aw88298_stop()
+{
+    int ret = 0;
+    int data = 0;
+    ret |= aw88298_read_reg(AW88298_SYSCTRL_REG04, &data);
+    data |= 0x03;
+    data &= ~(1 << 6);
+    ret |= aw88298_write_reg(AW88298_SYSCTRL_REG04, data);
+    return (ret == 0) ? ESP_OK : ESP_FAIL;;
+}
+
+static int aw88298_start()
+{
+    int ret = 0;
+    int data = 0;
+    ret |= aw88298_read_reg(AW88298_SYSCTRL_REG04, &data);
+    data &= ~0x03;
+    data |= (1 << 6);
+    ret |= aw88298_write_reg(AW88298_SYSCTRL_REG04, data);
+    return (ret == 0) ? ESP_OK : ESP_FAIL;;
 }
 
 esp_err_t aw88298_codec_init(audio_hal_codec_config_t *codec_cfg)
@@ -111,5 +204,67 @@ esp_err_t aw88298_codec_init(audio_hal_codec_config_t *codec_cfg)
     if (ret != 0) {
         return ESP_FAIL;
     }
+
+    // Sample rate
+    audio_hal_codec_i2s_iface_t *i2s_cfg = &(codec_cfg->i2s_iface);
+    int sample_fre = 0;
+    switch (i2s_cfg->samples) {
+        case AUDIO_HAL_08K_SAMPLES:
+            sample_fre = 8000;
+            break;
+        case AUDIO_HAL_11K_SAMPLES:
+            sample_fre = 11025;
+            break;
+        case AUDIO_HAL_16K_SAMPLES:
+            sample_fre = 16000;
+            break;
+        case AUDIO_HAL_22K_SAMPLES:
+            sample_fre = 22050;
+            break;
+        case AUDIO_HAL_24K_SAMPLES:
+            sample_fre = 24000;
+            break;
+        case AUDIO_HAL_32K_SAMPLES:
+            sample_fre = 32000;
+            break;
+        case AUDIO_HAL_44K_SAMPLES:
+            sample_fre = 44100;
+            break;
+        case AUDIO_HAL_48K_SAMPLES:
+            sample_fre = 48000;
+            break;
+        default:
+            ESP_LOGE(TAG, "Unable to configure sample rate %dHz", sample_fre);
+            break;
+    }
+    if (aw88298_config_sample(sample_fre) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
+    codec_dac_volume_config_t vol_cfg = AW88298_DAC_VOL_CFG_DEFAULT();
+    dac_vol_handle = audio_codec_volume_init(&vol_cfg);
+
     return ESP_OK;
+}
+
+esp_err_t aw88298_codec_deinit()
+{
+    aw88298_stop();
+    i2c_bus_delete(i2c_handle);
+    audio_codec_volume_deinit(dac_vol_handle);
+    return ESP_OK;
+}
+
+esp_err_t aw88298_codec_ctrl_state(audio_hal_codec_mode_t mode, audio_hal_ctrl_t ctrl_state)
+{
+    esp_err_t ret = ESP_OK;
+
+    if (ctrl_state == AUDIO_HAL_CTRL_START) {
+        ret |= aw88298_start();
+    } else {
+        ESP_LOGW(TAG, "The codec is about to stop");
+        ret |= aw88298_stop();
+    }
+
+    return ret;
 }

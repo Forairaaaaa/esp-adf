@@ -201,10 +201,11 @@ audio_board_handle_t audio_board_init(void)
     audio_board_i2c_init();
     audio_board_axp2101_init();
     audio_board_aw9523_init();
-    audio_board_aw88298_init();
+    // audio_board_aw88298_init();
     i2c_detect(board_i2c_bus_handle);
     board_handle = (audio_board_handle_t) audio_calloc(1, sizeof(struct audio_board_handle));
     AUDIO_MEM_CHECK(TAG, board_handle, return NULL);
+    board_reset_aw88298();
     board_handle->audio_hal = audio_board_codec_init();
     board_handle->adc_hal = audio_board_adc_init();
     return board_handle;
@@ -217,10 +218,10 @@ audio_hal_handle_t audio_board_codec_init(void)
     // AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
     // return codec_hal;
 
-    // audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
-    // audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_AW88298_DEFAULT_HANDLE);
-    // AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
-    // return codec_hal;
+    audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
+    audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_AW88298_DEFAULT_HANDLE);
+    AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
+    return codec_hal;
 
     return NULL;
 }
