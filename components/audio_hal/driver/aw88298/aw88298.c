@@ -224,11 +224,53 @@ static int aw88298_set_mute(bool mute)
     return aw88298_write_reg(AW88298_SYSCTRL2_REG05, regv);
 }
 
+static float _get_vol_db(esp_codec_dev_vol_curve_t *curve, int vol)
+{
+    if (vol == 0) {
+        return -96.0;
+    }
+    int n = curve->count;
+    if (n == 0) {
+        return 0.0;
+    }
+    if (vol >= curve->vol_map[n - 1].vol) {
+        return curve->vol_map[n - 1].db_value;
+    }
+    for (int i = 0; i < n - 1; i++) {
+        if (vol < curve->vol_map[i + 1].vol) {
+            if (curve->vol_map[i].vol != curve->vol_map[i + 1].vol) {
+                float ratio = (curve->vol_map[i + 1].db_value - curve->vol_map[i].db_value) /
+                              (curve->vol_map[i + 1].vol - curve->vol_map[i].vol);
+                return curve->vol_map[i].db_value + (vol - curve->vol_map[i].vol) * ratio;
+            }
+            break;
+        }
+    }
+    return 0.0;
+}
+
+static int _get_default_vol_curve(esp_codec_dev_vol_curve_t *curve)
+{
+    curve->vol_map = (esp_codec_dev_vol_map_t *) malloc(2 * sizeof(esp_codec_dev_vol_map_t));
+    if (curve->vol_map) {
+        curve->count = 2;
+        curve->vol_map[0].vol = 0;
+        curve->vol_map[0].db_value = -50.0;
+        curve->vol_map[1].vol = 100;
+        curve->vol_map[1].db_value = 0.0;
+    }
+    return ESP_CODEC_DEV_OK;
+}
+
 static int aw88298_set_vol(float volume)
 {
     ESP_LOGD(TAG, "Set volume to: %.2f", volume);
+
     float hw_gain = 20 * log10(3.3 / 5.0) + 1;
+    ESP_LOGD(TAG, "gain: %f", hw_gain);
+    
     volume -= hw_gain;
+    ESP_LOGD(TAG, "Set volume to: %.2f", volume);
     int reg = esp_codec_dev_vol_calc_reg(&vol_range, volume);
     reg = (reg << 8) | 0x64;
     int ret = aw88298_write_reg(AW88298_HAGCCFG4_REG0C, reg);
@@ -335,7 +377,12 @@ static int _volume_buffer = 0;
 esp_err_t aw88298_codec_set_voice_volume(int volume)
 {
     ESP_LOGD(TAG, "Set volume to: %d", volume);
-    if (aw88298_set_vol(volume) != ESP_OK) {
+
+    esp_codec_dev_vol_curve_t    vol_curve;
+    _get_default_vol_curve(&vol_curve);
+    float db_value = _get_vol_db(&vol_curve, volume);
+
+    if (aw88298_set_vol(db_value) != ESP_OK) {
         return ESP_FAIL;
     }
     _volume_buffer = volume;
