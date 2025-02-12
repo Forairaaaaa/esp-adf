@@ -83,7 +83,8 @@
 #define BOARD_PA_GAIN             (0)  /* Power amplifier gain defined by board (dB) */
 #define PA_ENABLE_GPIO            GPIO_NUM_NC
 #define HEADPHONE_DETECT          (-1)
-#define ES7210_MIC_SELECT         (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2 | ES7210_INPUT_MIC3)
+// #define ES7210_MIC_SELECT         (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2 | ES7210_INPUT_MIC3)
+#define ES7210_MIC_SELECT (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2)
 
 // extern audio_hal_func_t AUDIO_CODEC_ES8311_DEFAULT_HANDLE;
 extern audio_hal_func_t AUDIO_CODEC_AW88298_DEFAULT_HANDLE;
