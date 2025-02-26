@@ -1,0 +1,361 @@
+/*
+ * ESPRESSIF MIT License
+ *
+ * Copyright (c) 2023 <ESPRESSIF SYSTEMS (SHANGHAI) CO., LTD>
+ *
+ * Permission is hereby granted for use on all ESPRESSIF SYSTEMS products, in which case,
+ * it is free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software is furnished
+ * to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ */
+
+#include "esp_log.h"
+#include "esp_lcd_panel_ops.h"
+#include "driver/i2c_master.h"
+
+#include "audio_mem.h"
+#include "periph_sdcard.h"
+#include "periph_lcd.h"
+#include "periph_button.h"
+#include "tca9554.h"
+#include "board.h"
+
+static const char *TAG = "AUDIO_BOARD";
+
+static audio_board_handle_t board_handle = 0;
+static i2c_master_bus_handle_t board_i2c_bus_handle;
+static i2c_master_bus_handle_t board_i2c_bus_internal_handle;
+static i2c_master_dev_handle_t baord_pi4ioe_handle;
+static i2c_master_dev_handle_t baord_lp5562_handle;
+
+/* --------------------------------- I2C Bus -------------------------------- */
+static void audio_board_i2c_init()
+{
+    i2c_master_bus_config_t i2c_bus_cfg = {
+        .i2c_port = I2C_NUM_0,
+        .sda_io_num = GPIO_NUM_38,
+        .scl_io_num = GPIO_NUM_39,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .intr_priority = 0,
+        .trans_queue_depth = 0,
+        .flags = {
+            .enable_internal_pullup = 1,
+        },
+    };
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &board_i2c_bus_handle));
+
+    i2c_bus_cfg.i2c_port = I2C_NUM_1;
+    i2c_bus_cfg.sda_io_num = GPIO_NUM_45;
+    i2c_bus_cfg.scl_io_num = GPIO_NUM_0;
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &board_i2c_bus_internal_handle));
+}
+
+static void audio_board_i2c_deinit()
+{
+    ESP_ERROR_CHECK(i2c_del_master_bus(board_i2c_bus_handle));
+    ESP_ERROR_CHECK(i2c_del_master_bus(board_i2c_bus_internal_handle));
+}
+
+static void i2c_detect(i2c_master_bus_handle_t bus_handle)
+{
+    uint8_t address;
+    printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\r\n");
+    for (int i = 0; i < 128; i += 16) {
+        printf("%02x: ", i);
+        for (int j = 0; j < 16; j++) {
+            fflush(stdout);
+            address = i + j;
+            esp_err_t ret = i2c_master_probe(bus_handle, address, pdMS_TO_TICKS(200));
+            if (ret == ESP_OK) {
+                printf("%02x ", address);
+            } else if (ret == ESP_ERR_TIMEOUT) {
+                printf("UU ");
+            } else {
+                printf("-- ");
+            }
+        }
+        printf("\r\n");
+    }
+}
+
+static esp_err_t i2c_dev_write_reg_8(i2c_master_dev_handle_t i2c_dev, uint8_t reg, uint8_t data)
+{
+    uint8_t w_buf[2];
+    w_buf[0] = reg;
+    w_buf[1] = data;
+    esp_err_t ret = i2c_master_transmit(i2c_dev, w_buf, 2, portMAX_DELAY);
+    ESP_ERROR_CHECK(ret);
+    return ret;
+}
+
+static esp_err_t i2c_dev_write_reg_16(i2c_master_dev_handle_t i2c_dev, uint8_t reg, uint16_t data)
+{
+    uint8_t w_buf[3];
+    w_buf[0] = reg;
+    w_buf[1] = (uint8_t)((data & 0xFFFF) >> 8);
+    w_buf[2] = (uint8_t)(data & 0xFF);
+    esp_err_t ret = i2c_master_transmit(i2c_dev, w_buf, 3, portMAX_DELAY);
+    ESP_ERROR_CHECK(ret);
+    return ret;
+}
+
+static uint8_t i2c_dev_read_reg_8(i2c_master_dev_handle_t i2c_dev, uint8_t reg)
+{
+    uint8_t w_buf[1];
+    uint8_t r_buf[1];
+    w_buf[0] = reg;
+    ESP_ERROR_CHECK(i2c_master_transmit_receive(i2c_dev, w_buf, 1, r_buf, 1, portMAX_DELAY));
+    return r_buf[0];
+}
+
+/* --------------------------------- PI4IOE --------------------------------- */
+#define PI4IOE_ADDR          0x43
+#define PI4IOE_REG_CTRL      0x00
+#define PI4IOE_REG_IO_PP     0x07
+#define PI4IOE_REG_IO_DIR    0x03
+#define PI4IOE_REG_IO_OUT    0x05
+#define PI4IOE_REG_IO_PULLUP 0x0D
+
+static void audio_board_pi4ioe_init()
+{
+    ESP_LOGI(TAG, "Init PI4IOE");
+
+    i2c_device_config_t pi4ioe_config = {};
+    pi4ioe_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    pi4ioe_config.device_address = PI4IOE_ADDR;
+    pi4ioe_config.scl_speed_hz = 400000;
+    i2c_master_bus_add_device(board_i2c_bus_handle, &pi4ioe_config, &baord_pi4ioe_handle);
+
+    i2c_dev_write_reg_8(baord_pi4ioe_handle, PI4IOE_REG_IO_PP, 0x00); // Set to high-impedance
+    i2c_dev_write_reg_8(baord_pi4ioe_handle, PI4IOE_REG_IO_PULLUP, 0xFF); // Enable pull-up
+    i2c_dev_write_reg_8(baord_pi4ioe_handle, PI4IOE_REG_IO_DIR, 0x6E); // Set input=0, output=1
+    i2c_dev_write_reg_8(baord_pi4ioe_handle, PI4IOE_REG_IO_OUT, 0xFF); // Set outputs to 1
+}
+
+static void audio_board_set_speaker_mute(bool mute)
+{
+    i2c_dev_write_reg_8(baord_pi4ioe_handle, PI4IOE_REG_IO_OUT, mute ? 0x00 : 0xFF);
+}
+
+/* --------------------------------- LP5562 --------------------------------- */
+
+static void audio_board_lp5562_init()
+{
+    ESP_LOGI(TAG, "Init LP5562");
+
+    i2c_device_config_t lp5562_config = {};
+    lp5562_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    lp5562_config.device_address = 0x30;
+    lp5562_config.scl_speed_hz = 400000;
+    i2c_master_bus_add_device(board_i2c_bus_internal_handle, &lp5562_config, &baord_lp5562_handle);
+
+    i2c_dev_write_reg_8(baord_lp5562_handle, 0x00, 0B01000000); // Set chip_en to 1
+    i2c_dev_write_reg_8(baord_lp5562_handle, 0x08, 0B00000001); // Enable internal clock
+    i2c_dev_write_reg_8(baord_lp5562_handle, 0x70, 0B00000000); // Configure all LED outputs to be controlled from I2C registers
+
+    // PWM clock frequency 558 Hz
+    uint8_t data = i2c_dev_read_reg_8(baord_lp5562_handle, 0x08);
+    data = data | 0B01000000;
+    i2c_dev_write_reg_8(baord_lp5562_handle, 0x08, data);
+}
+
+static void audio_board_set_lcd_backlight(uint8_t brightness)
+{
+    i2c_dev_write_reg_8(baord_lp5562_handle, 0x0E, brightness);
+}
+
+audio_board_handle_t audio_board_init(void)
+{
+    if (board_handle) {
+        ESP_LOGW(TAG, "The board has already been initialized!");
+        return board_handle;
+    }
+    audio_board_i2c_init();
+    i2c_detect(board_i2c_bus_handle);
+    audio_board_pi4ioe_init();
+    audio_board_set_speaker_mute(false);
+    audio_board_lp5562_init();
+    audio_board_set_lcd_backlight(255);
+    while (1) {
+        audio_board_set_lcd_backlight(255);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        audio_board_set_lcd_backlight(0);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    audio_board_i2c_deinit();
+
+    board_handle = (audio_board_handle_t) audio_calloc(1, sizeof(struct audio_board_handle));
+    AUDIO_MEM_CHECK(TAG, board_handle, return NULL);
+    board_handle->audio_hal = audio_board_codec_init();
+    board_handle->adc_hal = audio_board_adc_init();
+    return board_handle;
+}
+
+audio_hal_handle_t audio_board_codec_init(void)
+{
+    // audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
+    // audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_AW88298_DEFAULT_HANDLE);
+    // AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
+    // return codec_hal;
+
+    return NULL;
+}
+
+audio_hal_handle_t audio_board_adc_init(void)
+{
+    // audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
+    // audio_hal_handle_t adc_hal = NULL;
+    // adc_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES7210_DEFAULT_HANDLE);
+    // AUDIO_NULL_CHECK(TAG, adc_hal, return NULL);
+    // return adc_hal;
+
+    return NULL;
+}
+
+/* ---------------------------------- TODO ---------------------------------- */
+
+
+static esp_err_t _get_lcd_io_bus (void *bus, esp_lcd_panel_io_spi_config_t *io_config,
+                                  esp_lcd_panel_io_handle_t *out_panel_io)
+{
+    return esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)bus, io_config, out_panel_io);
+}
+
+void *audio_board_lcd_init(esp_periph_set_handle_t set, void *cb)
+{
+    if  (LCD_CTRL_GPIO >=0) {
+        gpio_config_t bk_gpio_config = {
+            .mode = GPIO_MODE_OUTPUT,
+            .pin_bit_mask = 1ULL << LCD_CTRL_GPIO
+        };
+        gpio_config(&bk_gpio_config);
+        gpio_set_level(LCD_CTRL_GPIO, true);
+    }
+
+    spi_bus_config_t buscfg = {
+        .sclk_io_num = LCD_CLK_GPIO,
+        .mosi_io_num = LCD_MOSI_GPIO,
+        .miso_io_num = -1,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = LCD_V_RES * LCD_H_RES * 2
+    };
+    ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
+
+    esp_lcd_panel_io_spi_config_t io_config = {
+        .dc_gpio_num = LCD_DC_GPIO,
+        .cs_gpio_num = LCD_CS_GPIO,
+        .pclk_hz = 10 * 1000 * 1000,
+        .lcd_cmd_bits = 8,
+        .lcd_param_bits = 8,
+        .spi_mode = 0,
+        .trans_queue_depth = 10,
+        .on_color_trans_done = cb,
+        .user_ctx = NULL
+    };
+    esp_lcd_panel_dev_config_t panel_config = {
+        .reset_gpio_num = LCD_RST_GPIO,
+        .flags.reset_active_high = 1,
+        .color_space = LCD_COLOR_SPACE,
+        .bits_per_pixel = 16
+    };
+    periph_lcd_cfg_t cfg = {
+        .io_bus = (void *)SPI2_HOST,
+        .new_panel_io = _get_lcd_io_bus,
+        .lcd_io_cfg = &io_config,
+        .new_lcd_panel = esp_lcd_new_panel_st7789,
+        .lcd_dev_cfg = &panel_config,
+        .rest_cb = NULL,
+        .rest_cb_ctx = NULL,
+        .lcd_swap_xy = LCD_SWAP_XY,
+        .lcd_mirror_x = LCD_MIRROR_X,
+        .lcd_mirror_y = LCD_MIRROR_Y,
+        .lcd_color_invert = LCD_COLOR_INV
+    };
+    esp_periph_handle_t periph_lcd = periph_lcd_init(&cfg);
+    AUDIO_NULL_CHECK(TAG, periph_lcd, return NULL);
+    esp_periph_start(set, periph_lcd);
+
+    return (void *)periph_lcd_get_panel_handle(periph_lcd);
+}
+
+esp_err_t audio_board_key_init(esp_periph_set_handle_t set)
+{
+    periph_button_cfg_t btn_cfg = {
+        .gpio_mask = (1ULL << get_input_rec_id()),
+    };
+    esp_periph_handle_t button_handle = periph_button_init(&btn_cfg);
+    AUDIO_NULL_CHECK(TAG, button_handle, return ESP_ERR_ADF_MEMORY_LACK);
+    return esp_periph_start(set, button_handle);
+}
+
+esp_err_t audio_board_sdcard_init(esp_periph_set_handle_t set, periph_sdcard_mode_t mode)
+{
+    if (mode != SD_MODE_1_LINE && mode != SD_MODE_4_LINE) {
+        ESP_LOGE(TAG, "Current board only support 1-line and 4-line SD mode!");
+        return ESP_FAIL;
+    }
+    periph_sdcard_cfg_t sdcard_cfg = {
+        .root = "/sdcard",
+        .card_detect_pin = get_sdcard_intr_gpio(),
+        .mode = mode
+    };
+
+    // Enable SDCard power
+    if (get_sdcard_power_ctrl_gpio() >= 0) {
+        gpio_config_t gpio_cfg = {
+            .mode = GPIO_MODE_OUTPUT,
+            .pin_bit_mask = 1ULL << get_sdcard_power_ctrl_gpio()
+        };
+        gpio_config(&gpio_cfg);
+        gpio_set_level(get_sdcard_power_ctrl_gpio(), 0);
+    }
+
+    esp_periph_handle_t sdcard_handle = periph_sdcard_init(&sdcard_cfg);
+    esp_err_t ret = esp_periph_start(set, sdcard_handle);
+    int retry_time = 5;
+    bool mount_flag = false;
+    while (retry_time --) {
+        if (periph_sdcard_is_mounted(sdcard_handle)) {
+            mount_flag = true;
+            break;
+        } else {
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+        }
+    }
+    if (mount_flag == false) {
+        ESP_LOGE(TAG, "Sdcard mount failed");
+        return ESP_FAIL;
+    }
+    return ret;
+}
+
+audio_board_handle_t audio_board_get_handle(void)
+{
+    return board_handle;
+}
+
+esp_err_t audio_board_deinit(audio_board_handle_t audio_board)
+{
+    AUDIO_NULL_CHECK(TAG, audio_board, return ESP_FAIL);
+    esp_err_t ret = ESP_OK;
+    ret |= audio_hal_deinit(audio_board->audio_hal);
+    ret |= audio_hal_deinit(audio_board->adc_hal);
+    audio_free(audio_board);
+    board_handle = NULL;
+    return ret;
+}

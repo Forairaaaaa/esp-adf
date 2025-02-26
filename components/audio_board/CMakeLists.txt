@@ -115,6 +115,15 @@ set(COMPONENT_SRCS
 )
 endif()
 
+if (CONFIG_ESP32_S3_ATOMS3R_ECHO_BASE_BOARD)
+message(STATUS "Current board name is " CONFIG_ESP32_S3_ATOMS3R_ECHO_BASE_BOARD)
+list(APPEND COMPONENT_ADD_INCLUDEDIRS ./atoms3r_echo_base)
+set(COMPONENT_SRCS
+./atoms3r_echo_base/board.c
+./atoms3r_echo_base/board_pins_config.c
+)
+endif()
+
 if (CONFIG_ESP32_C3_LYRA_V2_BOARD)
 message(STATUS "Current board name is " CONFIG_ESP32_C3_LYRA_V2_BOARD)
 list(APPEND COMPONENT_ADD_INCLUDEDIRS ./esp32_c3_lyra)
