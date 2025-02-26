@@ -75,43 +75,42 @@
 /**
  * @brief  Audio Codec Chip Function Definition
  */
-#define FUNC_AUDIO_CODEC_EN       (1)
-#define CODEC_ADC_I2S_PORT        ((i2s_port_t)0)
-#define CODEC_ADC_BITS_PER_SAMPLE ((i2s_data_bit_width_t)32)  /* 32bit */
-#define CODEC_ADC_SAMPLE_RATE     (48000)
-#define RECORD_HARDWARE_AEC       (true)
-#define BOARD_PA_GAIN             (0)  /* Power amplifier gain defined by board (dB) */
-#define PA_ENABLE_GPIO            GPIO_NUM_NC
-#define HEADPHONE_DETECT          (-1)
-// #define ES7210_MIC_SELECT         (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2 | ES7210_INPUT_MIC3)
-#define ES7210_MIC_SELECT (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2)
+#define FUNC_AUDIO_CODEC_EN          (1)
+#define ES8311_MCLK_SOURCE           (1)   /* 0 From MCLK of esp32   1 From BCLK */
+#define HEADPHONE_DETECT             (-1)
+#define PA_ENABLE_GPIO               (-1)
+#define CODEC_ADC_I2S_PORT           ((i2s_port_t)0)
+#define CODEC_ADC_BITS_PER_SAMPLE    ((i2s_data_bit_width_t)16)  /* 16bit */
+#define CODEC_ADC_SAMPLE_RATE        (48000)
+// #define RECORD_HARDWARE_AEC          (true)
+#define RECORD_HARDWARE_AEC          (false)
+#define BOARD_PA_GAIN                (6)  /* Power amplifier gain defined by board (dB) */
 
-// extern audio_hal_func_t AUDIO_CODEC_ES8311_DEFAULT_HANDLE;
-extern audio_hal_func_t AUDIO_CODEC_AW88298_DEFAULT_HANDLE;
-extern audio_hal_func_t AUDIO_CODEC_ES7210_DEFAULT_HANDLE;
-#define AUDIO_CODEC_DEFAULT_CONFIG(){                   \
-        .adc_input  = AUDIO_HAL_ADC_INPUT_LINE1,        \
-        .dac_output = AUDIO_HAL_DAC_OUTPUT_ALL,         \
-        .codec_mode = AUDIO_HAL_CODEC_MODE_BOTH,        \
-        .i2s_iface = {                                  \
-            .mode = AUDIO_HAL_MODE_SLAVE,               \
-            .fmt = AUDIO_HAL_I2S_NORMAL,                \
-            .samples = AUDIO_HAL_48K_SAMPLES,           \
-            .bits = AUDIO_HAL_BIT_LENGTH_16BITS,        \
-        },                                              \
+extern audio_hal_func_t AUDIO_CODEC_ES8311_DEFAULT_HANDLE;
+
+#define AUDIO_CODEC_DEFAULT_CONFIG(){             \
+        .adc_input  = AUDIO_HAL_ADC_INPUT_LINE1,  \
+        .dac_output = AUDIO_HAL_DAC_OUTPUT_ALL,   \
+        .codec_mode = AUDIO_HAL_CODEC_MODE_BOTH,  \
+        .i2s_iface = {                            \
+            .mode = AUDIO_HAL_MODE_SLAVE,         \
+            .fmt = AUDIO_HAL_I2S_NORMAL,          \
+            .samples = AUDIO_HAL_48K_SAMPLES,     \
+            .bits = AUDIO_HAL_BIT_LENGTH_16BITS,  \
+        },                                        \
 };
 
 /**
  * @brief Button Function Definition
  */
-#define FUNC_BUTTON_EN              (1)
-#define INPUT_KEY_NUM               (1)
+#define FUNC_BUTTON_EN              (0)
+#define INPUT_KEY_NUM               (-1)
 #define BUTTON_VOLUP_ID             (-1)
 #define BUTTON_VOLDOWN_ID           (-1)
 #define BUTTON_SET_ID               (-1)
 #define BUTTON_PLAY_ID              (-1)
 #define BUTTON_MODE_ID              (-1)
-#define BUTTON_REC_ID               (1)
+#define BUTTON_REC_ID               (-1)
 
 #define INPUT_KEY_DEFAULT_INFO() {                     \
     {                                                  \

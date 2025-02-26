@@ -155,7 +155,8 @@ int8_t get_blue_led_gpio(void)
     return -1;
 }
 
+#define FROM_SCLK_PIN       1
 int8_t get_es8311_mclk_src(void)
 {
-    return -1;
+    return FROM_SCLK_PIN;
 }
