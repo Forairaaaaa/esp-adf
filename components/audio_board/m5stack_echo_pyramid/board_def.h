@@ -51,13 +51,15 @@
 #define FUNC_AUDIO_CODEC_EN       (1)
 #define CODEC_ADC_I2S_PORT        ((i2s_port_t)0)
 #define CODEC_ADC_BITS_PER_SAMPLE ((i2s_data_bit_width_t)32)  /* 32bit */
-#define CODEC_ADC_SAMPLE_RATE     (48000)
+// #define CODEC_ADC_SAMPLE_RATE     (48000)
+#define CODEC_ADC_SAMPLE_RATE     (16000)
 #define RECORD_HARDWARE_AEC       (true)
 #define BOARD_PA_GAIN             (-1)  /* Power amplifier gain defined by board (dB) */
 #define HEADPHONE_DETECT          (-1)
-#define PA_ENABLE_GPIO            GPIO_NUM_48
+#define PA_ENABLE_GPIO            (GPIO_NUM_NC)
 #define ES8311_MCLK_SOURCE        (0)  /* 0 From MCLK of esp32   1 From BCLK */
-#define ES7210_MIC_SELECT         (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2 | ES7210_INPUT_MIC3)
+// #define ES7210_MIC_SELECT         (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2 | ES7210_INPUT_MIC3)
+#define ES7210_MIC_SELECT         (ES7210_INPUT_MIC1 | ES7210_INPUT_MIC3)
 
 /**
  * @brief ADC input data format
@@ -67,6 +69,17 @@
 extern audio_hal_func_t AUDIO_CODEC_ES8311_DEFAULT_HANDLE;
 extern audio_hal_func_t AUDIO_CODEC_ES7210_DEFAULT_HANDLE;
 
+// #define AUDIO_CODEC_DEFAULT_CONFIG(){                   
+//         .adc_input  = AUDIO_HAL_ADC_INPUT_LINE1,        
+//         .dac_output = AUDIO_HAL_DAC_OUTPUT_ALL,         
+//         .codec_mode = AUDIO_HAL_CODEC_MODE_BOTH,        
+//         .i2s_iface = {                                  
+//             .mode = AUDIO_HAL_MODE_SLAVE,               
+//             .fmt = AUDIO_HAL_I2S_NORMAL,                
+//             .samples = AUDIO_HAL_48K_SAMPLES,           
+//             .bits = AUDIO_HAL_BIT_LENGTH_16BITS,        
+//         },                                              
+// };
 #define AUDIO_CODEC_DEFAULT_CONFIG(){                   \
         .adc_input  = AUDIO_HAL_ADC_INPUT_LINE1,        \
         .dac_output = AUDIO_HAL_DAC_OUTPUT_ALL,         \
@@ -74,8 +87,8 @@ extern audio_hal_func_t AUDIO_CODEC_ES7210_DEFAULT_HANDLE;
         .i2s_iface = {                                  \
             .mode = AUDIO_HAL_MODE_SLAVE,               \
             .fmt = AUDIO_HAL_I2S_NORMAL,                \
-            .samples = AUDIO_HAL_48K_SAMPLES,           \
-            .bits = AUDIO_HAL_BIT_LENGTH_16BITS,        \
+            .samples = AUDIO_HAL_16K_SAMPLES,           \
+            .bits = AUDIO_HAL_32K_SAMPLES,        \
         },                                              \
 };
 
