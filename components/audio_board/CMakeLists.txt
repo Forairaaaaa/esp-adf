@@ -152,4 +152,13 @@ set(COMPONENT_SRCS
 )
 endif()
 
+if (CONFIG_M5STACK_ECHO_PYRAMID_BOARD)
+message(STATUS "Current board name is " CONFIG_M5STACK_ECHO_PYRAMID_BOARD)
+list(APPEND COMPONENT_ADD_INCLUDEDIRS ./m5stack_echo_pyramid)
+set(COMPONENT_SRCS
+./m5stack_echo_pyramid/board.c
+./m5stack_echo_pyramid/board_pins_config.c
+)
+endif()
+
 register_component()
