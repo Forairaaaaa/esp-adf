@@ -32,7 +32,6 @@
 #include "freertos/task.h"
 #include "driver/i2c_master.h"
 #include "string.h"
-#include "audio_hal/driver/es7210/es7210.h"
 
 static const char *TAG = "Echo-Pyramid";
 
