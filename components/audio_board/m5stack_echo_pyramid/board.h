@@ -42,6 +42,7 @@ extern "C" {
  */
 struct audio_board_handle {
     audio_hal_handle_t audio_hal; /*!< audio hardware abstract layer handle */
+    audio_hal_handle_t adc_hal;   /*!< adc hardware abstract layer handle */
 };
 
 typedef struct audio_board_handle *audio_board_handle_t;
@@ -59,6 +60,14 @@ audio_board_handle_t audio_board_init(void);
  * @return The audio hal handle
  */
 audio_hal_handle_t audio_board_codec_init(void);
+
+/**
+ * @brief Initialize adc chip
+ *
+ * @return The audio hal handle
+ */
+audio_hal_handle_t audio_board_adc_init(void);
+
 
 
 

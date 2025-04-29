@@ -32,6 +32,7 @@
 #include "freertos/task.h"
 #include "driver/i2c_master.h"
 #include "string.h"
+#include "audio_hal/driver/es7210/es7210.h"
 
 static const char *TAG = "Echo-Pyramid";
 
@@ -275,6 +276,7 @@ audio_board_handle_t audio_board_init(void)
     audio_board_i2c_deinit();
 
     board_handle->audio_hal = audio_board_codec_init();
+    board_handle->adc_hal = audio_board_adc_init();
     return board_handle;
 }
 
@@ -284,6 +286,15 @@ audio_hal_handle_t audio_board_codec_init(void)
     audio_hal_handle_t codec_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES8311_DEFAULT_HANDLE);
     AUDIO_NULL_CHECK(TAG, codec_hal, return NULL);
     return codec_hal;
+}
+
+audio_hal_handle_t audio_board_adc_init(void)
+{
+    audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
+    audio_hal_handle_t adc_hal = NULL;
+    adc_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES7210_DEFAULT_HANDLE);
+    AUDIO_NULL_CHECK(TAG, adc_hal, return NULL);
+    return adc_hal;
 }
 
 esp_err_t audio_board_key_init(esp_periph_set_handle_t set)
