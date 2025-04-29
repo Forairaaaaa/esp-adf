@@ -33,7 +33,7 @@
 #include "driver/i2c_master.h"
 #include "string.h"
 
-static const char *TAG = "AUDIO_BOARD";
+static const char *TAG = "Echo-Pyramid";
 
 static audio_board_handle_t board_handle = 0;
 static i2c_master_bus_handle_t board_i2c_bus_handle;
@@ -48,8 +48,8 @@ static void audio_board_i2c_init()
 {
     i2c_master_bus_config_t i2c_bus_cfg = {
         .i2c_port = I2C_NUM_0,
-        .sda_io_num = GPIO_NUM_12,
-        .scl_io_num = GPIO_NUM_11,
+        .sda_io_num = GPIO_NUM_38,
+        .scl_io_num = GPIO_NUM_39,
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
         .intr_priority = 0,

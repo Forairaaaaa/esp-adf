@@ -30,7 +30,7 @@
 #include "audio_mem.h"
 #include "soc/soc_caps.h"
 
-static const char *TAG = "ESP32_S3_KORVO_2L";
+static const char *TAG = "Echo-Pyramid";
 
 esp_err_t get_i2c_pins(i2c_port_t port, i2c_config_t *i2c_config)
 {
@@ -51,10 +51,10 @@ esp_err_t get_i2s_pins(int port, board_i2s_pin_t *i2s_config)
 {
     AUDIO_NULL_CHECK(TAG, i2s_config, return ESP_FAIL);
     if (port == 0) {
-        i2s_config->bck_io_num = GPIO_NUM_8;
-        i2s_config->ws_io_num = GPIO_NUM_6;
-        i2s_config->data_out_num = GPIO_NUM_5;
-        i2s_config->data_in_num = GPIO_NUM_7;
+        i2s_config->bck_io_num = GPIO_NUM_6;
+        i2s_config->ws_io_num = GPIO_NUM_8;
+        i2s_config->data_out_num = GPIO_NUM_7;
+        i2s_config->data_in_num = GPIO_NUM_5;
         i2s_config->mck_io_num = -1;
     } else if (port == 1) {
         i2s_config->bck_io_num = -1;
