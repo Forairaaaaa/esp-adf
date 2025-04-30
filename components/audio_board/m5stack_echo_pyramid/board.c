@@ -48,8 +48,8 @@ static void audio_board_i2c_init()
 {
     i2c_master_bus_config_t i2c_bus_cfg = {
         .i2c_port = I2C_NUM_0,
-        .sda_io_num = GPIO_NUM_38,
-        .scl_io_num = GPIO_NUM_39,
+        .sda_io_num = GPIO_NUM_25,
+        .scl_io_num = GPIO_NUM_21,
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
         .intr_priority = 0,
