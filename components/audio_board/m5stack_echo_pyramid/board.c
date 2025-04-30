@@ -32,6 +32,7 @@
 #include "freertos/task.h"
 #include "driver/i2c_master.h"
 #include "string.h"
+#include "math.h"
 
 static const char *TAG = "Echo-Pyramid";
 
@@ -39,6 +40,7 @@ static audio_board_handle_t board_handle = 0;
 static i2c_master_bus_handle_t board_i2c_bus_handle;
 static i2c_master_dev_handle_t baord_si5351_handle;
 static i2c_master_dev_handle_t baord_aw87559_handle;
+static i2c_master_dev_handle_t baord_stm32_handle;
 
 #define setbit(data, bit) ((data) |= (1 << (bit)))
 #define clrbit(data, bit) ((data) &= ~(1 << (bit)))
@@ -256,6 +258,93 @@ static void audio_board_aw87559_init()
     printf("0x0f : %02X\n", i2c_dev_read_reg_8(baord_aw87559_handle, 0x0f));
 }
 
+/* ---------------------------------- STM32 --------------------------------- */
+#define TOUCH_BUTTON_STATUS_REG_ADDR (0x00)
+#define RGB1_BRIGHTNESS_REG_ADDR     (0x10)
+#define RGB2_BRIGHTNESS_REG_ADDR     (0x11)
+#define RGB1_SHOW_MODE_REG_ADDR      (0x20)
+#define RGB2_SHOW_MODE_REG_ADDR      (0x21)
+#define RGB1_STATUS_REG_ADDR         (0x30)
+#define RGB2_STATUS_REG_ADDR         (0x70)
+#define SPK_RESTART_REG_ADDR         (0xB0)
+#define FLASH_WRITE_BACK_REG_ADDR    (0xF0)
+#define IAP_UPDATE_REG_ADDR          (0xFD)
+#define SW_VER_REG_ADDR              (0xFE)
+#define I2C_ADDR_REG_ADDR            (0xFF)
+
+void audio_board_stm32_init()
+{
+    ESP_LOGI(TAG, "Init STM32");
+
+    i2c_device_config_t stm32_config = {};
+    stm32_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    stm32_config.device_address = 0x1A;
+    stm32_config.scl_speed_hz = 400000;
+    i2c_master_bus_add_device(board_i2c_bus_handle, &stm32_config, &baord_stm32_handle);
+}
+
+void audio_board_stm32_set_rgb_color(uint8_t channel, uint8_t item, uint32_t color)
+{
+    if (channel == 0) {
+        i2c_dev_write_regs(baord_stm32_handle, RGB1_STATUS_REG_ADDR + item * 4, (uint8_t*)&color, sizeof(color));
+    } else {
+        i2c_dev_write_regs(baord_stm32_handle, RGB2_STATUS_REG_ADDR + item * 4, (uint8_t*)&color, sizeof(color));
+    }
+}
+
+uint32_t _color_list[] = {
+    0xADD8E6, // 冰蓝
+    0xE6E6FA, // 薰衣草紫
+    0x98FF98, // 薄荷绿
+    0xFFB6C1, // 樱花粉
+    0xFF7F50, // 珊瑚橙
+    0x6495ED, // 珊瑚蓝
+    0xFFD700, // 金黄
+    0x2F4F4F  // 深空灰
+};
+
+// 伽马缩放 RGB888（γ校正，默认γ=2.2）
+uint32_t scale_color_gamma(uint32_t color, float scale) {
+    if (scale < 0.0f) scale = 0.0f;
+    if (scale > 1.0f) scale = 1.0f;
+
+    const float gamma = 2.2f;
+
+    // 提取 R、G、B
+    uint8_t r = (color >> 16) & 0xFF;
+    uint8_t g = (color >> 8)  & 0xFF;
+    uint8_t b =  color        & 0xFF;
+
+    // sRGB to linear
+    float rf = powf(r / 255.0f, gamma);
+    float gf = powf(g / 255.0f, gamma);
+    float bf = powf(b / 255.0f, gamma);
+
+    // 缩放亮度
+    rf *= scale;
+    gf *= scale;
+    bf *= scale;
+
+    // linear to sRGB
+    r = (uint8_t)(powf(rf, 1.0f / gamma) * 255.0f + 0.5f);
+    g = (uint8_t)(powf(gf, 1.0f / gamma) * 255.0f + 0.5f);
+    b = (uint8_t)(powf(bf, 1.0f / gamma) * 255.0f + 0.5f);
+
+    return (r << 16) | (g << 8) | b;
+}
+
+static void set_all_rgb_color(uint32_t color)
+{
+    uint32_t color_scaled = scale_color_gamma(color, 0.3f);
+
+    ESP_LOGI(TAG, "set_all_rgb_color: %06lX\n", color_scaled);
+    for (int i = 0; i < 14; i++) {
+        audio_board_stm32_set_rgb_color(0, i, color_scaled);
+        audio_board_stm32_set_rgb_color(1, i, color_scaled);
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
 audio_board_handle_t audio_board_init(void)
 {
     if (board_handle) {
@@ -271,6 +360,13 @@ audio_board_handle_t audio_board_init(void)
     audio_board_si5351_init();
     vTaskDelay(pdMS_TO_TICKS(500));
     audio_board_aw87559_init();
+    audio_board_stm32_init();
+    // set_all_rgb_color(_color_list[0]);
+    set_all_rgb_color(_color_list[5]);
+    // xTaskCreate(led_task, "led", 4000, NULL, 10, NULL);
+    // while (1) {
+    //     vTaskDelay(pdMS_TO_TICKS(100));
+    // }
     vTaskDelay(pdMS_TO_TICKS(100));
     audio_board_i2c_deinit();
 
@@ -298,18 +394,18 @@ audio_hal_handle_t audio_board_adc_init(void)
 
 esp_err_t audio_board_key_init(esp_periph_set_handle_t set)
 {
-    periph_adc_button_cfg_t adc_btn_cfg = PERIPH_ADC_BUTTON_DEFAULT_CONFIG();
-    adc_arr_t adc_btn_tag = ADC_DEFAULT_ARR();
-    adc_btn_tag.total_steps = 6;
-    adc_btn_tag.adc_ch = ADC1_CHANNEL_4;
-    int btn_array[7] = {190, 600, 1000, 1375, 1775, 2195, 3000};
-    adc_btn_tag.adc_level_step = btn_array;
-    adc_btn_cfg.arr = &adc_btn_tag;
-    adc_btn_cfg.arr_size = 1;
-    esp_periph_handle_t adc_btn_handle = periph_adc_button_init(&adc_btn_cfg);
-    AUDIO_NULL_CHECK(TAG, adc_btn_handle, return ESP_ERR_ADF_MEMORY_LACK);
-    return esp_periph_start(set, adc_btn_handle);
-
+    // periph_adc_button_cfg_t adc_btn_cfg = PERIPH_ADC_BUTTON_DEFAULT_CONFIG();
+    // adc_arr_t adc_btn_tag = ADC_DEFAULT_ARR();
+    // adc_btn_tag.total_steps = 6;
+    // adc_btn_tag.adc_ch = ADC1_CHANNEL_4;
+    // int btn_array[7] = {190, 600, 1000, 1375, 1775, 2195, 3000};
+    // adc_btn_tag.adc_level_step = btn_array;
+    // adc_btn_cfg.arr = &adc_btn_tag;
+    // adc_btn_cfg.arr_size = 1;
+    // esp_periph_handle_t adc_btn_handle = periph_adc_button_init(&adc_btn_cfg);
+    // AUDIO_NULL_CHECK(TAG, adc_btn_handle, return ESP_ERR_ADF_MEMORY_LACK);
+    // return esp_periph_start(set, adc_btn_handle);
+    return ESP_OK;
 }
 
 audio_board_handle_t audio_board_get_handle(void)

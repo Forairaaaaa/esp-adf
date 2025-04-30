@@ -158,6 +158,7 @@ list(APPEND COMPONENT_ADD_INCLUDEDIRS ./m5stack_echo_pyramid)
 set(COMPONENT_SRCS
 ./m5stack_echo_pyramid/board.c
 ./m5stack_echo_pyramid/board_pins_config.c
+./m5stack_echo_pyramid/stm32.c
 )
 endif()
 
